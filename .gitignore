@@ -1,0 +1,6 @@
+/bin/
+/dist/
+/lazyiperf
+*.test
+coverage.out
+.DS_Store

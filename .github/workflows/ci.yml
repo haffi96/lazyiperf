@@ -1,0 +1,47 @@
+name: CI and releases
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: go build -o bin/lazyiperf ./cmd/lazyiperf
+      - name: Verify ICMP loopback
+        shell: bash
+        run: |
+          bin/lazyiperf --target 127.0.0.1 --count 3 --duration 0s --interval 10ms --json > icmp.jsonl
+          python3 - <<'PY'
+          import json
+          with open('icmp.jsonl') as f:
+              result = json.loads(f.readlines()[-1])
+          assert result['done'] and result['received'] == 3, result
+          PY
+  release:
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build release assets
+        run: ./scripts/release.sh "$GITHUB_REF_NAME"
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "lazyiperf $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md

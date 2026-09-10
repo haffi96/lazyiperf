@@ -7,6 +7,7 @@ permissions:
 jobs:
   test:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -18,6 +19,9 @@ jobs:
       - run: go test -race ./...
       - run: go vet ./...
       - run: go build -o bin/lazyiperf ./cmd/lazyiperf
+      - name: Allow the CI user to open Linux ICMP datagram sockets
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w "net.ipv4.ping_group_range=$(id -g) $(id -g)"
       - name: Verify ICMP loopback
         shell: bash
         run: |
